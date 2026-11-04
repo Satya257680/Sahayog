@@ -1,98 +1,44 @@
-# Sahayog — React + Node.js + Express + MySQL
+# Sahayog 🤝
 
-A full-stack starter for the Sahayog community-help platform: people can give items for free or publish requests for things they need.
+### Together, We Can Make a Difference
 
-## Stack
-- Frontend: React + Vite + React Router
-- Backend: Node.js + Express
-- Database: MySQL (`mysql2`)
-- Security foundation: bcrypt password hashing, JWT authentication middleware, input validation, Helmet, CORS, rate limiting
-- UI: responsive pastel pink/lavender design inspired by the supplied reference
+Sahayog is a community-driven platform built to bring people together through kindness, sharing, and mutual support.
 
-## Pages / workflows
-- Home: hero, search, category cards, nearby listings
-- Give Something and Need Help pages
-- Create a donation or need request
-- Browse/search/filter listings
-- Listing detail page and contact action
-- Login and register
-- My Listings dashboard; mark a listing completed
-- Saved listings
-- Messages API foundation (conversation creation and message send/list)
+The idea behind Sahayog is simple: **help people who need something by connecting them with people who have something to give.**
 
-## Requirements
-- Node.js 20+ recommended
-- MySQL 8+
-- npm
+## 🌟 About Sahayog
 
-## 1. Create the database
-Open MySQL Workbench and run `database/schema.sql`.
+In our everyday lives, many useful items go unused while others struggle to access the things they need.
 
-## 2. Configure the backend
-Copy `server/.env.example` to `server/.env`, then update the MySQL credentials and JWT secret.
+Sahayog aims to bridge this gap by creating a space where people can:
 
-```env
-PORT=5000
-CLIENT_URL=http://localhost:5173
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_mysql_password
-DB_NAME=sahayog
-JWT_SECRET=replace_with_a_long_random_secret
-```
+- Share items they no longer need.
+- Find resources and essentials from others.
+- Ask for help when they need it.
+- Support their community through small acts of kindness.
+- Connect with people who are willing to help.
 
-## 3. Install and run
+## ❤️ Our Mission
 
-From the project root:
+Our mission is to encourage generosity, reduce waste, and build stronger communities where helping others becomes a natural part of everyday life.
 
-```bash
-npm install
-npm --prefix server install
-npm --prefix client install
-npm run dev
-```
+## 🌍 Our Vision
 
-- Frontend: http://localhost:5173
-- API health check: http://localhost:5000/api/health
+We envision a world where resources are shared responsibly, communities support one another, and no useful item goes to waste when someone else could benefit from it.
 
-If you prefer separate terminals:
-```bash
-npm run dev:server
-npm run dev:client
-```
+## 💡 How Sahayog Works
 
-## Demo flow
-1. Register a user.
-2. Log in.
-3. Open Give or Need Help and publish a listing.
-4. Browse listings and open the detail page.
-5. Save a listing or contact its owner.
-6. Open My Listings to manage your posts.
+1. **Give Something** — Share items that could be useful to someone else.
+2. **Need Something** — Create a request for something you need.
+3. **Discover** — Browse available items and community requests.
+4. **Connect** — Reach out to people and coordinate assistance.
+5. **Make a Difference** — Turn unused resources into meaningful support.
 
-## API overview
-- `GET /api/health`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me` (JWT)
-- `GET /api/listings?type=give|need&category=books&q=...`
-- `GET /api/listings/:id`
-- `POST /api/listings` (JWT)
-- `PATCH /api/listings/:id/status` (JWT, owner only)
-- `GET /api/saved` (JWT)
-- `POST /api/saved/:listingId` (JWT)
-- `DELETE /api/saved/:listingId` (JWT)
-- `POST /api/conversations` (JWT)
-- `GET /api/conversations` (JWT)
-- `GET /api/conversations/:id/messages` (JWT participant only)
-- `POST /api/conversations/:id/messages` (JWT participant only)
+## 🤝 Be Part of the Movement
 
-## Important production notes
-This is a development-ready starter, not a fully audited production service. Before public launch:
-- Use HTTPS and a strong unique JWT secret.
-- Configure exact CORS origins, secure deployment environment variables and backups.
-- Add email/phone verification, password reset, account moderation, reporting and audit logs.
-- Add real image uploads with validation and object storage (currently accepts an image URL).
-- Add privacy controls and abuse prevention.
-- Blood and medicine listings require careful legal/safety review, moderation and local policy checks. Do not use this demo to coordinate urgent medical care without appropriate verification.
-- Messages are persisted in MySQL but do not use WebSockets for real-time delivery yet.
+Every small act of kindness matters.
+
+Whether you give something, request assistance, or simply help spread the word, you contribute to building a more caring and connected society.
+
+**Sahayog — A little help can make a big difference.**
+
