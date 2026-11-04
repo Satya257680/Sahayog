@@ -65,7 +65,15 @@ export function Landing() {
 
   return <>
     <section className="hero">
-      <div className="hero-art" aria-hidden="true"><div className="hero-orb orb-one" /><div className="hero-orb orb-two" /><div className="hero-people">🫶 💗 🤝</div><div className="hero-note note-one">Kindness looks good on you ✨</div><div className="hero-note note-two">100% free to share</div></div>
+      <div className="hero-art" aria-hidden="true">
+        <div className="hero-orb orb-one" /><div className="hero-orb orb-two" />
+        <div className="hero-illustration-wrap">
+          <span className="hero-spark spark-a">✦</span><span className="hero-spark spark-b">✧</span>
+          <img className="hero-illustration" src="/images/sahayog-3d-donation.png" alt="" />
+        </div>
+        <div className="hero-note note-one">Kindness looks good on you <span>✨</span></div>
+        <div className="hero-note note-two">100% free to share</div>
+      </div>
       <div className="hero-copy">
         <span className="eyebrow"><Sparkles size={14} /> A kinder community, together</span>
         <h1>Give a little.<br /><span className="gradient-text">Change a lot.</span></h1>
