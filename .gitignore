@@ -8,3 +8,6 @@ server/uploads/*
 server/.env
 client/.env
 .DS_Store
+# Ignore SQL schema and database scripts
+server/sql/
+*.sql
