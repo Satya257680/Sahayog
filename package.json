@@ -1,6 +1,6 @@
 {
   "name": "sahayog-community-platform",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "install:all": "npm install && npm --prefix server install && npm --prefix client install",
@@ -8,7 +8,9 @@
     "dev:server": "npm run dev --prefix server",
     "dev:client": "npm run dev --prefix client",
     "build": "npm run build --prefix client",
-    "start": "npm start --prefix server"
+    "start": "npm start --prefix server",
+    "migrate": "npm run migrate --prefix server",
+    "setup": "npm run install:all && npm run migrate"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
