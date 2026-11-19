@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "migrate": "node src/migrate.js"
+    "migrate": "node src/migrate.js",
+    "test": "node --test --test-concurrency=1 test/password-policy.test.js test/auth.test.js",
+    "test:unit": "node --test test/password-policy.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

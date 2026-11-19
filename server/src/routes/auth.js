@@ -1,379 +1,514 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const db = require('../db');
-const { withTransaction } = require('../db');
-const { config } = require('../config');
-const mailer = require('../utils/mailer');
-const { requireAuth } = require('../middleware/auth');
-const { limits } = require('../middleware/security');
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const db = require("../db");
+const { withTransaction } = require("../db");
+const { config } = require("../config");
+const mailer = require("../utils/mailer");
+const { requireAuth } = require("../middleware/auth");
+const { limits } = require("../middleware/security");
 const {
-  normalizeEmail, isValidEmail, passwordProblem, generateOtp, hashSecret, safeEqualHex,
-  randomToken, setSessionCookie, clearSessionCookie, publicUser
-} = require('../utils/security');
+  normalizeEmail,
+  isValidEmail,
+  passwordProblem,
+  randomToken,
+  isResetTokenShape,
+  hashResetToken,
+  setSessionCookie,
+  clearSessionCookie,
+  publicUser,
+} = require("../utils/security");
 
 const router = express.Router();
 const BCRYPT_ROUNDS = 12;
-const DUMMY_HASH = bcrypt.hashSync('timing-equaliser-not-a-real-password', BCRYPT_ROUNDS);
-const { otp: OTP } = config;
+const DUMMY_HASH = bcrypt.hashSync(
+  "timing-equaliser-not-a-real-password",
+  BCRYPT_ROUNDS,
+);
+const RESET = config.passwordReset;
 
-const GENERIC_LOGIN_ERROR = 'Email or password is incorrect.';
-const GENERIC_CODE_ERROR = 'This code is invalid or has expired. Please request a new one.';
+const GENERIC_LOGIN_ERROR = "Email or password is incorrect.";
+const INVALID_RESET_LINK =
+  "This reset link is invalid or has expired. Please request a new one.";
 
 async function logEvent(event, { userId = null, email = null, req } = {}) {
   try {
-    await db.execute('INSERT INTO auth_events (user_id, email, event, ip) VALUES (?, ?, ?, ?)', [userId, email, event, req?.ip?.slice(0, 64) || null]);
-  } catch (err) { console.error('auth_events insert failed:', err.message); }
+    await db.execute(
+      "INSERT INTO auth_events (user_id, email, event, ip) VALUES (?, ?, ?, ?)",
+      [userId, email, event, req?.ip?.slice(0, 64) || null],
+    );
+  } catch (err) {
+    console.error("auth_events insert failed:", err.message);
+  }
 }
 
-const USER_COLUMNS = 'id, name, email, password_hash, email_verified, token_version, phone, city, state, created_at';
+const USER_COLUMNS =
+  "id, name, email, password_hash, email_verified, token_version, phone, city, state, created_at";
 async function findUserByEmail(email, conn = db) {
-  const [rows] = await conn.execute(`SELECT ${USER_COLUMNS} FROM users WHERE email = ?`, [email]);
+  const [rows] = await conn.execute(
+    `SELECT ${USER_COLUMNS} FROM users WHERE email = ?`,
+    [email],
+  );
   return rows[0] || null;
 }
 async function findUserById(id, conn = db) {
-  const [rows] = await conn.execute(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`, [id]);
+  const [rows] = await conn.execute(
+    `SELECT ${USER_COLUMNS} FROM users WHERE id = ?`,
+    [id],
+  );
   return rows[0] || null;
 }
-
-/** Works out whether a new OTP can be sent for a challenge row (cooldown + hourly cap). */
-function sendWindow(row) {
-  if (!row) return { allowed: true, resetWindow: true };
-  const sinceLast = Number(row.since_last);
-  const windowAge = Number(row.window_age);
-  if (sinceLast < OTP.resendCooldownSeconds) return { allowed: false, retryAfter: OTP.resendCooldownSeconds - sinceLast };
-  if (windowAge >= 3600) return { allowed: true, resetWindow: true };
-  if (Number(row.send_count) >= OTP.maxSendsPerHour) return { allowed: false, retryAfter: 3600 - windowAge, capped: true };
-  return { allowed: true, resetWindow: false };
-}
-function tooSoon(res, win) {
-  res.set('Retry-After', String(win.retryAfter));
-  return res.status(429).json({
-    message: win.capped
-      ? 'You have requested too many codes. Please try again later.'
-      : `Please wait ${win.retryAfter} seconds before requesting another code.`,
-    retryAfter: win.retryAfter
-  });
-}
-const TIMING_COLUMNS = `TIMESTAMPDIFF(SECOND, last_sent_at, UTC_TIMESTAMP()) AS since_last,
-  TIMESTAMPDIFF(SECOND, window_started_at, UTC_TIMESTAMP()) AS window_age,
-  (otp_expires_at < UTC_TIMESTAMP()) AS expired`;
 
 // ---------------------------------------------------------------------------
 // Providers (lets the UI enable/disable the Google & Facebook buttons honestly)
 // ---------------------------------------------------------------------------
-router.get('/providers', (req, res) => {
+router.get("/providers", (req, res) => {
   res.json({
     google: config.google.enabled,
     facebook: config.facebook.enabled,
-    password: { minLength: 15, maxLength: 30 },
-    otp: { length: OTP.length, ttlMinutes: OTP.ttlMinutes, resendCooldownSeconds: OTP.resendCooldownSeconds }
+    password: {
+      minLength: config.password.minLength,
+      maxLength: config.password.maxLength,
+    },
+    passwordReset: {
+      available: mailer.isConfigured(),
+      ttlMinutes: RESET.ttlMinutes,
+    },
   });
 });
 
 // ---------------------------------------------------------------------------
-// Sign up → email OTP → verified account  (F-01, F-02)
+// Sign up (email + password). The email/SMS OTP step is disabled for this release:
+// the account is created immediately and the user is signed in.
 // ---------------------------------------------------------------------------
-async function issueSignupOtp({ email, name, passwordHash }) {
-  const [rows] = await db.execute(`SELECT id, send_count, ${TIMING_COLUMNS} FROM pending_registrations WHERE email = ?`, [email]);
-  const win = sendWindow(rows[0]);
-  if (!win.allowed) return { win };
-  const code = generateOtp();
-  const otpHash = hashSecret(code, `signup:${email}`);
-  if (!rows[0]) {
-    if (!passwordHash) return { missing: true };
-    await db.execute(
-      `INSERT INTO pending_registrations (email, name, password_hash, otp_hash, otp_expires_at, attempts, send_count, window_started_at, last_sent_at)
-       VALUES (?, ?, ?, ?, UTC_TIMESTAMP() + INTERVAL ? MINUTE, 0, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
-      [email, name, passwordHash, otpHash, OTP.ttlMinutes]
-    );
-  } else {
-    await db.execute(
-      `UPDATE pending_registrations SET
-         name = COALESCE(?, name), password_hash = COALESCE(?, password_hash),
-         otp_hash = ?, otp_expires_at = UTC_TIMESTAMP() + INTERVAL ? MINUTE, attempts = 0,
-         send_count = IF(?, 1, send_count + 1), window_started_at = IF(?, UTC_TIMESTAMP(), window_started_at),
-         last_sent_at = UTC_TIMESTAMP()
-       WHERE email = ?`,
-      [name || null, passwordHash || null, otpHash, OTP.ttlMinutes, win.resetWindow ? 1 : 0, win.resetWindow ? 1 : 0, email]
-    );
-  }
-  const [[pending]] = await db.execute('SELECT name FROM pending_registrations WHERE email = ?', [email]);
+router.post("/register", limits.register, async (req, res, next) => {
   try {
-    await mailer.sendSignupOtp(email, pending.name, code);
-  } catch (err) {
-    // Let the user retry immediately if delivery failed.
-    await db.execute('UPDATE pending_registrations SET last_sent_at = UTC_TIMESTAMP() - INTERVAL 1 DAY, send_count = GREATEST(send_count - 1, 0) WHERE email = ?', [email]);
-    throw Object.assign(new Error('We could not send the verification email. Please try again in a moment.'), { status: 503, expose: true, cause: err });
-  }
-  return { sent: true };
-}
-
-router.post('/register', limits.sendOtp, async (req, res, next) => {
-  try {
-    const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
+    const name = String(req.body.name || "")
+      .trim()
+      .replace(/\s+/g, " ");
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
-    if (name.length < 2 || name.length > 100) return res.status(400).json({ message: 'Name must be between 2 and 100 characters.', field: 'name' });
-    if (!isValidEmail(email)) return res.status(400).json({ message: 'Enter a valid email address.', field: 'email' });
+    if (name.length < 2 || name.length > 100)
+      return res
+        .status(400)
+        .json({
+          message: "Name must be between 2 and 100 characters.",
+          field: "name",
+        });
+    if (!isValidEmail(email))
+      return res
+        .status(400)
+        .json({ message: "Enter a valid email address.", field: "email" });
     const problem = passwordProblem(password);
-    if (problem) return res.status(400).json({ message: problem, field: 'password' });
+    if (problem)
+      return res.status(400).json({ message: problem, field: "password" });
+
+    const taken = {
+      message:
+        'An account with this email already exists. Log in, or use "Forgot password?" to reset it.',
+      field: "email",
+    };
+    if (await findUserByEmail(email)) {
+      await logEvent("signup_existing_email", { email, req });
+      return res.status(409).json(taken);
+    }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    const generic = { message: `We sent a ${OTP.length}-digit verification code to ${email}.`, email, resendIn: OTP.resendCooldownSeconds, expiresInMinutes: OTP.ttlMinutes };
-
-    const existing = await findUserByEmail(email);
-    if (existing) {
-      // Do not reveal that the account exists; tell the real owner by email instead.
-      mailer.sendAlreadyRegistered(email).catch(err => console.error('already-registered mail failed:', err.message));
-      await logEvent('signup_existing_email', { userId: existing.id, email, req });
-      return res.json(generic);
-    }
-
-    const result = await issueSignupOtp({ email, name, passwordHash });
-    if (result.win) return tooSoon(res, result.win);
-    await logEvent('signup_otp_sent', { email, req });
-    res.json(generic);
-  } catch (err) { next(err); }
-});
-
-router.post('/register/resend', limits.sendOtp, async (req, res, next) => {
-  try {
-    const email = normalizeEmail(req.body.email);
-    if (!isValidEmail(email)) return res.status(400).json({ message: 'Enter a valid email address.' });
-    const generic = { message: 'If this sign-up is still pending, a new code is on its way.', resendIn: OTP.resendCooldownSeconds };
-    const result = await issueSignupOtp({ email });
-    if (result.win) return tooSoon(res, result.win);
-    if (result.sent) await logEvent('signup_otp_resent', { email, req });
-    res.json(generic);
-  } catch (err) { next(err); }
-});
-
-router.post('/register/verify', limits.verifyOtp, async (req, res, next) => {
-  try {
-    const email = normalizeEmail(req.body.email);
-    const code = String(req.body.otp || '').trim();
-    if (!isValidEmail(email) || !new RegExp(`^\\d{${OTP.length}}$`).test(code)) {
-      return res.status(400).json({ message: `Enter the ${OTP.length}-digit code from your email.` });
-    }
-    const outcome = await withTransaction(async conn => {
-      const [rows] = await conn.execute(`SELECT id, name, password_hash, otp_hash, attempts, ${TIMING_COLUMNS} FROM pending_registrations WHERE email = ? FOR UPDATE`, [email]);
-      const pending = rows[0];
-      if (!pending) return { status: 400, message: GENERIC_CODE_ERROR };
-      if (pending.attempts >= OTP.maxAttempts) return { status: 429, message: 'Too many incorrect attempts. Please request a new code.' };
-      if (Number(pending.expired)) return { status: 400, message: 'This code has expired. Please request a new one.' };
-      if (!safeEqualHex(hashSecret(code, `signup:${email}`), pending.otp_hash)) {
-        await conn.execute('UPDATE pending_registrations SET attempts = attempts + 1 WHERE id = ?', [pending.id]);
-        const left = OTP.maxAttempts - pending.attempts - 1;
-        return { status: 400, commit: true, message: left > 0 ? `Incorrect code. ${left} attempt${left === 1 ? '' : 's'} left.` : 'Too many incorrect attempts. Please request a new code.' };
-      }
-      if (await findUserByEmail(email, conn)) {
-        await conn.execute('DELETE FROM pending_registrations WHERE id = ?', [pending.id]);
-        return { status: 409, commit: true, message: 'This email is already registered. Please log in.' };
-      }
-      const [ins] = await conn.execute(
-        'INSERT INTO users (name, email, password_hash, email_verified, last_login_at) VALUES (?, ?, ?, 1, UTC_TIMESTAMP())',
-        [pending.name, email, pending.password_hash]
+    let userId;
+    try {
+      // email_verified stays 0: ownership is proven later (e.g. by using an emailed reset link).
+      const [ins] = await db.execute(
+        "INSERT INTO users (name, email, password_hash, email_verified, last_login_at) VALUES (?, ?, ?, 0, UTC_TIMESTAMP())",
+        [name, email, passwordHash],
       );
-      await conn.execute('DELETE FROM pending_registrations WHERE id = ?', [pending.id]);
-      return { userId: ins.insertId };
-    });
-    if (!outcome.userId) return res.status(outcome.status).json({ message: outcome.message });
-    const user = await findUserById(outcome.userId);
+      userId = ins.insertId;
+    } catch (err) {
+      if (err.code === "ER_DUP_ENTRY") return res.status(409).json(taken); // concurrent sign-up race
+      throw err;
+    }
+    // Clean up any half-finished sign-up from the old OTP flow (table may not exist on new installs).
+    db.execute("DELETE FROM pending_registrations WHERE email = ?", [
+      email,
+    ]).catch(() => {});
+
+    const user = await findUserById(userId);
     setSessionCookie(res, user);
-    await logEvent('signup_verified', { userId: user.id, email, req });
-    res.status(201).json({ user: publicUser(user), message: 'Your email is verified. Welcome to Sahayog!' });
-  } catch (err) { next(err); }
+    await logEvent("signup_success", { userId: user.id, email, req });
+    res
+      .status(201)
+      .json({
+        user: publicUser(user),
+        message: "Welcome to Sahayog! Your account is ready.",
+      });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ---------------------------------------------------------------------------
 // Login / logout / session
 // ---------------------------------------------------------------------------
-router.post('/login', limits.loginIp, limits.login, async (req, res, next) => {
+router.post("/login", limits.loginIp, limits.login, async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
-    const password = typeof req.body.password === 'string' ? req.body.password : '';
-    if (!isValidEmail(email) || !password) return res.status(400).json({ message: 'Enter your email and password.' });
+    const password =
+      typeof req.body.password === "string" ? req.body.password : "";
+    if (!isValidEmail(email) || !password)
+      return res
+        .status(400)
+        .json({ message: "Enter your email and password." });
 
     const user = await findUserByEmail(email);
-    const ok = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
+    // Always run bcrypt so response time doesn't reveal whether the account exists.
+    const ok = await bcrypt.compare(
+      password,
+      user?.password_hash || DUMMY_HASH,
+    );
     if (!user || !user.password_hash || !ok) {
-      // Signed up but never verified? Only tell them if they proved the password.
-      if (!user) {
-        const [pending] = await db.execute('SELECT password_hash FROM pending_registrations WHERE email = ?', [email]);
-        if (pending[0] && await bcrypt.compare(password, pending[0].password_hash)) {
-          return res.status(403).json({ message: 'Please verify your email to finish creating your account.', needsVerification: true, email });
-        }
-      }
-      await logEvent('login_failed', { userId: user?.id || null, email, req });
+      await logEvent("login_failed", { userId: user?.id || null, email, req });
       return res.status(401).json({ message: GENERIC_LOGIN_ERROR });
     }
-    if (!user.email_verified) return res.status(401).json({ message: GENERIC_LOGIN_ERROR });
 
-    await db.execute('UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = ?', [user.id]);
+    await db.execute(
+      "UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = ?",
+      [user.id],
+    );
     setSessionCookie(res, user);
-    await logEvent('login_success', { userId: user.id, email, req });
+    await logEvent("login_success", { userId: user.id, email, req });
     res.json({ user: publicUser(user) });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.post('/logout', async (req, res) => {
+router.post("/logout", async (req, res) => {
   clearSessionCookie(res);
-  res.json({ message: 'You have been logged out.' });
+  res.json({ message: "You have been logged out." });
 });
 
-router.get('/me', requireAuth, async (req, res, next) => {
+router.get("/me", requireAuth, async (req, res, next) => {
   try {
     const user = await findUserById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found.' });
-    const [ids] = await db.execute('SELECT provider FROM oauth_identities WHERE user_id = ?', [user.id]);
-    res.json({ user: { ...publicUser(user), providers: ids.map(r => r.provider) } });
-  } catch (err) { next(err); }
+    if (!user) return res.status(404).json({ message: "User not found." });
+    const [ids] = await db.execute(
+      "SELECT provider FROM oauth_identities WHERE user_id = ?",
+      [user.id],
+    );
+    res.json({
+      user: { ...publicUser(user), providers: ids.map((r) => r.provider) },
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.patch('/me', requireAuth, async (req, res, next) => {
+router.patch("/me", requireAuth, async (req, res, next) => {
   try {
-    const clean = (v, max) => String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
+    const clean = (v, max) =>
+      String(v ?? "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, max);
     const name = clean(req.body.name, 100);
     const phone = clean(req.body.phone, 30);
     const city = clean(req.body.city, 100);
     const state = clean(req.body.state, 100);
-    if (name.length < 2) return res.status(400).json({ message: 'Name must be between 2 and 100 characters.', field: 'name' });
-    if (phone && !/^[+0-9 ()-]{6,30}$/.test(phone)) return res.status(400).json({ message: 'Enter a valid phone number.', field: 'phone' });
-    await db.execute('UPDATE users SET name = ?, phone = ?, city = ?, state = ? WHERE id = ?', [name, phone || null, city || null, state || null, req.user.id]);
+    if (name.length < 2)
+      return res
+        .status(400)
+        .json({
+          message: "Name must be between 2 and 100 characters.",
+          field: "name",
+        });
+    if (phone && !/^[+0-9 ()-]{6,30}$/.test(phone))
+      return res
+        .status(400)
+        .json({ message: "Enter a valid phone number.", field: "phone" });
+    await db.execute(
+      "UPDATE users SET name = ?, phone = ?, city = ?, state = ? WHERE id = ?",
+      [name, phone || null, city || null, state || null, req.user.id],
+    );
     const user = await findUserById(req.user.id);
-    res.json({ user: publicUser(user), message: 'Profile saved.' });
-  } catch (err) { next(err); }
+    res.json({ user: publicUser(user), message: "Profile saved." });
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.post('/password/change', requireAuth, limits.verifyOtp, async (req, res, next) => {
-  try {
-    const user = await findUserById(req.user.id);
-    const current = typeof req.body.currentPassword === 'string' ? req.body.currentPassword : '';
-    const next_ = req.body.newPassword;
-    if (user.password_hash && !(await bcrypt.compare(current, user.password_hash))) {
-      return res.status(400).json({ message: 'Your current password is incorrect.', field: 'currentPassword' });
-    }
-    const problem = passwordProblem(next_);
-    if (problem) return res.status(400).json({ message: problem, field: 'newPassword' });
-    const hash = await bcrypt.hash(next_, BCRYPT_ROUNDS);
-    await db.execute('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?', [hash, user.id]);
-    const updated = await findUserById(user.id);
-    setSessionCookie(res, updated); // keep this device signed in, revoke all others
-    mailer.sendPasswordChanged(user.email).catch(() => {});
-    await logEvent('password_changed', { userId: user.id, email: user.email, req });
-    res.json({ message: 'Password updated. Other devices have been signed out.', user: publicUser(updated) });
-  } catch (err) { next(err); }
-});
-
-// ---------------------------------------------------------------------------
-// Forgot password → email OTP → reset token → new password  (F-04)
-// ---------------------------------------------------------------------------
-router.post('/password/forgot', limits.sendOtp, async (req, res, next) => {
-  try {
-    const email = normalizeEmail(req.body.email);
-    if (!isValidEmail(email)) return res.status(400).json({ message: 'Enter a valid email address.' });
-    const generic = { message: `If an account exists for ${email}, we sent a ${OTP.length}-digit code to it.`, resendIn: OTP.resendCooldownSeconds, expiresInMinutes: OTP.ttlMinutes };
-
-    const user = await findUserByEmail(email);
-    if (!user) { await logEvent('reset_unknown_email', { email, req }); return res.json(generic); }
-
-    const [rows] = await db.execute(`SELECT id, send_count, ${TIMING_COLUMNS} FROM password_resets WHERE user_id = ?`, [user.id]);
-    const win = sendWindow(rows[0]);
-    if (!win.allowed) return res.json(generic); // silently skip, response must look the same
-
-    const code = generateOtp();
-    const otpHash = hashSecret(code, `reset:${user.id}`);
-    if (!rows[0]) {
-      await db.execute(
-        `INSERT INTO password_resets (user_id, otp_hash, otp_expires_at, attempts, send_count, window_started_at, last_sent_at)
-         VALUES (?, ?, UTC_TIMESTAMP() + INTERVAL ? MINUTE, 0, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())`,
-        [user.id, otpHash, OTP.ttlMinutes]
-      );
-    } else {
-      await db.execute(
-        `UPDATE password_resets SET otp_hash = ?, otp_expires_at = UTC_TIMESTAMP() + INTERVAL ? MINUTE, attempts = 0,
-           send_count = IF(?, 1, send_count + 1), window_started_at = IF(?, UTC_TIMESTAMP(), window_started_at),
-           last_sent_at = UTC_TIMESTAMP(), reset_token_hash = NULL, reset_token_expires_at = NULL
-         WHERE user_id = ?`,
-        [otpHash, OTP.ttlMinutes, win.resetWindow ? 1 : 0, win.resetWindow ? 1 : 0, user.id]
-      );
-    }
+/** Signed-in password change (profile page). Requires the current password when one exists. */
+router.post(
+  "/password/change",
+  requireAuth,
+  limits.passwordChange,
+  async (req, res, next) => {
     try {
-      await mailer.sendResetOtp(email, code);
-      await logEvent('reset_otp_sent', { userId: user.id, email, req });
-    } catch (err) {
-      console.error('reset mail failed:', err.message);
-      await db.execute('UPDATE password_resets SET last_sent_at = UTC_TIMESTAMP() - INTERVAL 1 DAY WHERE user_id = ?', [user.id]);
-    }
-    res.json(generic);
-  } catch (err) { next(err); }
-});
-
-router.post('/password/verify', limits.verifyOtp, async (req, res, next) => {
-  try {
-    const email = normalizeEmail(req.body.email);
-    const code = String(req.body.otp || '').trim();
-    if (!isValidEmail(email) || !new RegExp(`^\\d{${OTP.length}}$`).test(code)) {
-      return res.status(400).json({ message: `Enter the ${OTP.length}-digit code from your email.` });
-    }
-    const user = await findUserByEmail(email);
-    if (!user) return res.status(400).json({ message: GENERIC_CODE_ERROR });
-
-    const outcome = await withTransaction(async conn => {
-      const [rows] = await conn.execute(`SELECT id, otp_hash, attempts, reset_token_hash, ${TIMING_COLUMNS} FROM password_resets WHERE user_id = ? FOR UPDATE`, [user.id]);
-      const reset = rows[0];
-      if (!reset || reset.reset_token_hash) return { status: 400, message: GENERIC_CODE_ERROR }; // already used
-      if (reset.attempts >= OTP.maxAttempts) return { status: 429, message: 'Too many incorrect attempts. Please request a new code.' };
-      if (Number(reset.expired)) return { status: 400, message: 'This code has expired. Please request a new one.' };
-      if (!safeEqualHex(hashSecret(code, `reset:${user.id}`), reset.otp_hash)) {
-        await conn.execute('UPDATE password_resets SET attempts = attempts + 1 WHERE id = ?', [reset.id]);
-        const left = OTP.maxAttempts - reset.attempts - 1;
-        return { status: 400, message: left > 0 ? `Incorrect code. ${left} attempt${left === 1 ? '' : 's'} left.` : 'Too many incorrect attempts. Please request a new code.' };
+      const user = await findUserById(req.user.id);
+      const current =
+        typeof req.body.currentPassword === "string"
+          ? req.body.currentPassword
+          : "";
+      const next_ = req.body.newPassword;
+      if (
+        user.password_hash &&
+        !(await bcrypt.compare(current, user.password_hash))
+      ) {
+        return res
+          .status(400)
+          .json({
+            message: "Your current password is incorrect.",
+            field: "currentPassword",
+          });
       }
-      const token = randomToken();
-      // Burn the OTP (single use) and issue a short-lived reset token instead.
-      await conn.execute(
-        `UPDATE password_resets SET otp_hash = ?, otp_expires_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND,
-           reset_token_hash = ?, reset_token_expires_at = UTC_TIMESTAMP() + INTERVAL ? MINUTE WHERE id = ?`,
-        [hashSecret(randomToken(), 'burned'), hashSecret(token, `reset-token:${user.id}`), OTP.resetTokenMinutes, reset.id]
+      const problem = passwordProblem(next_);
+      if (problem)
+        return res.status(400).json({ message: problem, field: "newPassword" });
+      const hash = await bcrypt.hash(next_, BCRYPT_ROUNDS);
+      await db.execute(
+        "UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?",
+        [hash, user.id],
       );
-      return { token };
-    });
-    if (!outcome.token) return res.status(outcome.status).json({ message: outcome.message });
-    await logEvent('reset_otp_verified', { userId: user.id, email, req });
-    res.json({ resetToken: outcome.token, expiresInMinutes: OTP.resetTokenMinutes, message: 'Code verified. Choose a new password.' });
-  } catch (err) { next(err); }
-});
+      await db.execute(
+        "UPDATE password_reset_tokens SET expires_at = UTC_TIMESTAMP() WHERE user_id = ? AND used_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+        [user.id],
+      );
+      const updated = await findUserById(user.id);
+      setSessionCookie(res, updated); // keep this device signed in, revoke all others
+      mailer
+        .sendPasswordChanged(user.email)
+        .catch((err) =>
+          console.error("password-changed mail failed:", err.message),
+        );
+      await logEvent("password_changed", {
+        userId: user.id,
+        email: user.email,
+        req,
+      });
+      res.json({
+        message: "Password updated. Other devices have been signed out.",
+        user: publicUser(updated),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
-router.post('/password/reset', limits.verifyOtp, async (req, res, next) => {
+// ---------------------------------------------------------------------------
+// Forgot password → emailed one-time link → new password
+//   POST /password/forgot        { email }            → always the same generic 200 response
+//   POST /password/reset/check   { token }            → 200 { valid: true } or 400
+//   POST /password/reset         { token, password }  → 200, password changed, all sessions revoked
+// The raw token only ever exists in the email link; the database stores an HMAC of it.
+// ---------------------------------------------------------------------------
+
+/** Creates a reset token and emails the link. Runs after the HTTP response so timing can't reveal accounts. */
+async function issuePasswordReset(user, req) {
+  // Per-account throttle (on top of the per-IP/email rate limiters).
+  const [[stats]] = await db.execute(
+    `SELECT COUNT(*) AS sent_last_hour,
+            COALESCE(MIN(TIMESTAMPDIFF(SECOND, created_at, UTC_TIMESTAMP())), 999999) AS since_last
+       FROM password_reset_tokens
+      WHERE user_id = ? AND created_at > UTC_TIMESTAMP() - INTERVAL 1 HOUR`,
+    [user.id],
+  );
+  if (
+    Number(stats.since_last) < RESET.resendCooldownSeconds ||
+    Number(stats.sent_last_hour) >= RESET.maxEmailsPerHour
+  ) {
+    await logEvent("reset_throttled", {
+      userId: user.id,
+      email: user.email,
+      req,
+    });
+    return;
+  }
+
+  const token = randomToken(32);
+  const [ins] = await withTransaction(async (conn) => {
+    // Only the newest link works: expire any outstanding ones.
+    await conn.execute(
+      "UPDATE password_reset_tokens SET expires_at = UTC_TIMESTAMP() WHERE user_id = ? AND used_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+      [user.id],
+    );
+    return conn.execute(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at, request_ip)
+       VALUES (?, ?, UTC_TIMESTAMP() + INTERVAL ? MINUTE, UTC_TIMESTAMP(), ?)`,
+      [
+        user.id,
+        hashResetToken(token),
+        RESET.ttlMinutes,
+        req.ip?.slice(0, 64) || null,
+      ],
+    );
+  });
+
+  // Token goes in the URL fragment (#), so it isn't sent to servers in requests, logs or Referer headers.
+  const link = `${config.clientUrl}/reset-password#token=${token}`;
   try {
-    const email = normalizeEmail(req.body.email);
-    const token = String(req.body.resetToken || '');
+    await mailer.sendPasswordResetLink(user.email, link, RESET.ttlMinutes);
+    await logEvent("reset_link_sent", {
+      userId: user.id,
+      email: user.email,
+      req,
+    });
+  } catch (err) {
+    console.error("[password-reset] email delivery failed:", err.message); // never log the link/token
+    await db.execute("DELETE FROM password_reset_tokens WHERE id = ?", [
+      ins.insertId,
+    ]);
+    await logEvent("reset_link_failed", {
+      userId: user.id,
+      email: user.email,
+      req,
+    });
+  }
+}
+
+router.post(
+  "/password/forgot",
+  limits.resetRequestIp,
+  limits.resetRequest,
+  async (req, res, next) => {
+    try {
+      const email = normalizeEmail(req.body.email);
+      if (!isValidEmail(email))
+        return res
+          .status(400)
+          .json({ message: "Enter a valid email address.", field: "email" });
+
+      if (!mailer.isConfigured()) {
+        // Operator problem, identical for every email address, so it reveals nothing about accounts.
+        console.error(
+          "[password-reset] Request rejected: email delivery is not configured (set SMTP_HOST / SMTP_USER / SMTP_PASS / MAIL_FROM).",
+        );
+        return res
+          .status(503)
+          .json({
+            message:
+              "Password reset by email is temporarily unavailable. Please try again later or contact support.",
+            code: "email_unavailable",
+          });
+      }
+
+      const generic = {
+        message: `If an account exists for ${email}, we've sent a link to reset the password. It expires in ${RESET.ttlMinutes} minutes.`,
+        expiresInMinutes: RESET.ttlMinutes,
+      };
+      res.json(generic);
+
+      // Everything below happens after the response, so existing and unknown emails look identical.
+      setImmediate(async () => {
+        try {
+          // Housekeeping: drop links that expired more than a day ago.
+          await db.execute(
+            "DELETE FROM password_reset_tokens WHERE expires_at < UTC_TIMESTAMP() - INTERVAL 1 DAY LIMIT 500",
+          );
+          const user = await findUserByEmail(email);
+          if (!user) {
+            await logEvent("reset_unknown_email", { email, req });
+            return;
+          }
+          await issuePasswordReset(user, req);
+        } catch (err) {
+          console.error("[password-reset] request failed:", err.message);
+        }
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** Returns the token row when the token exists, is unused and not expired. */
+async function findUsableResetToken(token, conn = db, lock = false) {
+  const [rows] = await conn.execute(
+    `SELECT id, user_id, used_at, (expires_at <= UTC_TIMESTAMP()) AS expired,
+            GREATEST(TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), expires_at), 0) AS minutes_left
+       FROM password_reset_tokens WHERE token_hash = ?${lock ? " FOR UPDATE" : ""}`,
+    [hashResetToken(token)],
+  );
+  const row = rows[0];
+  if (!row || row.used_at || Number(row.expired)) return null;
+  return row;
+}
+
+router.post(
+  "/password/reset/check",
+  limits.resetConfirm,
+  async (req, res, next) => {
+    try {
+      const token = req.body.token;
+      if (!isResetTokenShape(token))
+        return res
+          .status(400)
+          .json({ message: INVALID_RESET_LINK, code: "invalid_token" });
+      const row = await findUsableResetToken(token);
+      if (!row)
+        return res
+          .status(400)
+          .json({ message: INVALID_RESET_LINK, code: "invalid_token" });
+      res.json({ valid: true, expiresInMinutes: Number(row.minutes_left) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.post("/password/reset", limits.resetConfirm, async (req, res, next) => {
+  try {
+    const token = req.body.token;
     const password = req.body.password;
+    if (!isResetTokenShape(token))
+      return res
+        .status(400)
+        .json({ message: INVALID_RESET_LINK, code: "invalid_token" });
     const problem = passwordProblem(password);
-    if (problem) return res.status(400).json({ message: problem, field: 'password' });
-    const user = await findUserByEmail(email);
-    if (!user || !token) return res.status(400).json({ message: 'Your reset session has expired. Please start again.' });
+    if (problem)
+      return res.status(400).json({ message: problem, field: "password" });
+    // Cheap check first so an invalid link doesn't cost a bcrypt hash.
+    if (!(await findUsableResetToken(token)))
+      return res
+        .status(400)
+        .json({ message: INVALID_RESET_LINK, code: "invalid_token" });
 
     const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    const ok = await withTransaction(async conn => {
-      const [rows] = await conn.execute(
-        'SELECT id, reset_token_hash, (reset_token_expires_at < UTC_TIMESTAMP()) AS expired FROM password_resets WHERE user_id = ? FOR UPDATE',
-        [user.id]
+    const userId = await withTransaction(async (conn) => {
+      const row = await findUsableResetToken(token, conn, true); // re-check under lock: single use
+      if (!row) return null;
+      // New password + revoke every existing session (token_version) + the link proved email ownership.
+      await conn.execute(
+        "UPDATE users SET password_hash = ?, email_verified = 1, token_version = token_version + 1 WHERE id = ?",
+        [hash, row.user_id],
       );
-      const reset = rows[0];
-      if (!reset || !reset.reset_token_hash || Number(reset.expired) || !safeEqualHex(hashSecret(token, `reset-token:${user.id}`), reset.reset_token_hash)) return false;
-      // New password, revoke every existing session, and invalidate the reset challenge.
-      await conn.execute('UPDATE users SET password_hash = ?, email_verified = 1, token_version = token_version + 1 WHERE id = ?', [hash, user.id]);
-      await conn.execute('DELETE FROM password_resets WHERE id = ?', [reset.id]);
-      return true;
+      await conn.execute(
+        "UPDATE password_reset_tokens SET used_at = UTC_TIMESTAMP() WHERE id = ?",
+        [row.id],
+      );
+      await conn.execute(
+        "UPDATE password_reset_tokens SET expires_at = UTC_TIMESTAMP() WHERE user_id = ? AND used_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+        [row.user_id],
+      );
+      return Number(row.user_id);
     });
-    if (!ok) return res.status(400).json({ message: 'Your reset session has expired. Please start again.' });
+    if (!userId)
+      return res
+        .status(400)
+        .json({ message: INVALID_RESET_LINK, code: "invalid_token" });
+
+    const user = await findUserById(userId);
     clearSessionCookie(res);
-    mailer.sendPasswordChanged(email).catch(() => {});
-    await logEvent('password_reset', { userId: user.id, email, req });
-    res.json({ message: 'Password updated. Please log in with your new password.' });
-  } catch (err) { next(err); }
+    mailer
+      .sendPasswordChanged(user.email)
+      .catch((err) =>
+        console.error("password-changed mail failed:", err.message),
+      );
+    await logEvent("password_reset", { userId, email: user.email, req });
+    res.json({
+      message:
+        "Your password has been updated. Please log in with your new password.",
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;

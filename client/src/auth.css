@@ -1,0 +1,281 @@
+/* ==========================================================================
+   Sahayog — brand logo + centered authentication screens (login, sign-up,
+   forgot / reset password) and the legal pages.
+   Loaded after styles.css and app.css. Plain light surface, no decorative
+   waves or blobs. Uses the existing tokens (--l-*, --plum, --rose, --line).
+   The old split-screen rules (.auth-page / .auth-side / .auth-main) in app.css
+   are no longer referenced by any component.
+   ========================================================================== */
+
+/* ── Brand logo (approved symbol) ─────────────────────────────────────── */
+.brand-logo {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain; /* never stretch or crop */
+  aspect-ratio: 1 / 1;
+  height: auto;
+  user-select: none;
+}
+.topbar .brand-logo--nav {
+  width: 40px;
+  height: 40px;
+}
+.brand-logo--shell {
+  width: 34px;
+  height: 34px;
+}
+.footer-brand .brand-logo {
+  width: 24px;
+  height: 24px;
+}
+
+/* ── Page shell ───────────────────────────────────────────────────────── */
+.auth-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--l-lavender, #f7f4fd);
+}
+.auth-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: clamp(16px, 4vh, 48px) clamp(12px, 4vw, 32px) clamp(24px, 6vh, 64px);
+}
+.auth-center:focus {
+  outline: none;
+}
+
+/* margin-block:auto centers the card vertically when there is room and lets it
+   scroll naturally (no clipping) on short viewports, zoomed pages or docked DevTools. */
+.auth-panel {
+  width: 100%;
+  max-width: 560px;
+  margin-block: auto;
+  background: #fff;
+  border: 1px solid var(--l-line, #e7e2f1);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(49, 34, 101, 0.07);
+  padding: clamp(22px, 4.5vw, 40px) clamp(18px, 5vw, 44px)
+    clamp(22px, 4.5vw, 36px);
+  min-width: 0;
+}
+.auth-panel__logo {
+  display: block;
+  width: 72px;
+  margin: 0 auto 10px;
+  border-radius: 16px;
+}
+.auth-panel__logo .brand-logo {
+  width: 72px;
+  height: 72px;
+}
+
+.auth-panel h1 {
+  text-align: center;
+  font-size: clamp(26px, 4vw, 32px);
+  line-height: 1.15;
+  letter-spacing: -0.6px;
+  font-weight: 900;
+  color: var(--l-ink, #241b45);
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+.auth-panel .auth-sub {
+  text-align: center;
+  font-size: 15px;
+  color: var(--l-muted, #625b7c);
+  margin: 0 0 22px;
+  overflow-wrap: anywhere;
+}
+.auth-panel .auth-sub a,
+.auth-panel .fine-print a {
+  color: var(--plum, #4b329a);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-panel .auth-foot {
+  margin: 22px 0 0;
+}
+.auth-panel .auth-icon {
+  margin: 0 auto 12px;
+}
+.auth-panel .auth-icon--warn {
+  background: #fff4e0;
+  color: #9a5b00;
+}
+
+/* ── Fields ───────────────────────────────────────────────────────────── */
+.auth-panel .field {
+  margin-bottom: 16px;
+}
+.auth-panel .field label {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--l-ink, #241b45);
+}
+.auth-panel .field input {
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border-color: #ddd6ec;
+  font-size: 15px;
+}
+.auth-panel .field small {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.icon-input {
+  position: relative;
+}
+.icon-input__icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6e668b;
+  pointer-events: none;
+}
+.icon-input input {
+  padding-left: 44px !important;
+}
+.field.has-error .icon-input__icon {
+  color: var(--danger, #c0264d);
+}
+
+.auth-panel .forgot-row {
+  margin: -4px 0 18px;
+}
+.auth-panel .small-link {
+  font-size: 14px;
+  color: var(--plum, #4b329a);
+}
+.auth-panel .small-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.auth-panel .auth-submit {
+  min-height: 52px;
+  font-size: 16px;
+  font-weight: 800;
+  border-radius: 999px;
+  margin-top: 4px;
+  text-decoration: none;
+}
+.auth-panel .auth-submit:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+.auth-panel .social-btn {
+  min-height: 48px;
+  border-radius: 999px;
+  font-size: 14px;
+  padding-inline: 12px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+}
+.auth-panel .social-btn:hover:not(:disabled) {
+  box-shadow: none;
+  background: var(--l-lavender, #f7f4fd);
+}
+.auth-panel .social-btn:disabled {
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.auth-panel .social-note {
+  font-size: 13px;
+}
+.auth-panel .divider {
+  margin: 22px 0;
+  font-size: 13px;
+}
+.auth-panel .fine-print {
+  font-size: 13px;
+  margin-top: 16px;
+}
+
+.auth-steps {
+  margin: 0 0 18px;
+  padding: 14px 16px 14px 34px;
+  background: var(--l-lavender, #f7f4fd);
+  border: 1px solid var(--l-line, #e7e2f1);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--l-body, #4f4868);
+}
+.auth-steps li + li {
+  margin-top: 6px;
+}
+
+/* ── Legal pages ──────────────────────────────────────────────────────── */
+.legal {
+  max-width: 760px;
+  margin: 0 auto;
+  line-height: 1.7;
+  color: var(--l-body, #4f4868);
+}
+.legal h2 {
+  font-size: 19px;
+  color: var(--l-ink, #241b45);
+  margin: 28px 0 8px;
+}
+.legal ul {
+  padding-left: 22px;
+}
+.legal li + li {
+  margin-top: 6px;
+}
+.legal-back {
+  margin-top: 36px;
+  font-weight: 800;
+}
+.legal-back a {
+  color: var(--plum, #4b329a);
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .auth-panel {
+    border-radius: 16px;
+    box-shadow: none;
+  }
+  .auth-panel__logo,
+  .auth-panel__logo .brand-logo {
+    width: 60px;
+    height: 60px;
+  }
+  .auth-panel .social-row {
+    grid-template-columns: 1fr;
+  }
+  /* 16px stops iOS Safari from zooming into focused inputs. */
+  .auth-panel .field input {
+    font-size: 16px;
+  }
+}
+@media (max-width: 380px) {
+  .auth-center {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .auth-panel {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .auth-panel .otp-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-panel .auth-submit,
+  .auth-panel .social-btn {
+    transition: none;
+  }
+}

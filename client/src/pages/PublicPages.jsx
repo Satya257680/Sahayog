@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { BrandLogo } from "../brand";
 import {
   CATS,
   FALLBACK_IMAGES,
@@ -47,7 +48,8 @@ import {
 
 // ───────────────────────── Public layout (signed-out) ─────────────────────────
 
-export function PublicLayout() {
+/** Mobile-menu state shared by every page that shows the public header (landing + auth pages). */
+export function usePublicMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
   useEffect(() => {
@@ -62,6 +64,11 @@ export function PublicLayout() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
+  return [menuOpen, setMenuOpen];
+}
+
+export function PublicLayout() {
+  const [menuOpen, setMenuOpen] = usePublicMenu();
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
@@ -87,7 +94,7 @@ const PUBLIC_NAV = [
   { to: "/#how-it-works", hash: "#how-it-works", label: "How It Works" },
 ];
 
-function PublicHeader({ menuOpen, setMenuOpen }) {
+export function PublicHeader({ menuOpen, setMenuOpen }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname, hash } = useLocation();
@@ -102,9 +109,7 @@ function PublicHeader({ menuOpen, setMenuOpen }) {
   return (
     <header className="topbar">
       <Link to="/" className="brand" aria-label="Sahayog home">
-        <span className="brand-mark" aria-hidden="true">
-          <HeartHandshake size={22} strokeWidth={2} />
-        </span>
+        <BrandLogo size={40} className="brand-logo--nav" />
         <span>
           <strong>Sahayog</strong>
           <small>Give · Receive · Be Kind</small>
@@ -196,7 +201,7 @@ function Footer() {
       <div className="footer-inner">
         <div className="footer-about">
           <Link to="/" className="footer-brand">
-            <HeartHandshake size={20} aria-hidden="true" /> Sahayog
+            <BrandLogo size={24} /> Sahayog
           </Link>
           <p className="footer-tagline">Give · Receive · Be Kind</p>
           <p className="footer-mission">
