@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Link,
-  NavLink,
   Outlet,
   useNavigate,
   useParams,
@@ -17,14 +16,15 @@ import {
   Heart,
   ArrowRight,
   MessageCircle,
-  Users,
-  Gift,
-  CircleCheck,
   LogOut,
   UserRound,
-  HandHeart,
   ShieldCheck,
   Pencil,
+  Repeat2,
+  MessageCircleHeart,
+  HandHelping,
+  PackagePlus,
+  MessagesSquare,
 } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -52,7 +52,7 @@ export function PublicLayout() {
   const location = useLocation();
   useEffect(() => {
     setMenuOpen(false);
-  }, [location.pathname]);
+  }, [location.pathname, location.hash]);
   // Escape closes the mobile menu.
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -76,18 +76,26 @@ export function PublicLayout() {
   );
 }
 
+/**
+ * Public navigation introduces Sahayog; it does not link into the product.
+ * Give / Need / Explore stay available as routes and inside the signed-in app.
+ */
+const SECTION_HASHES = ["#who-we-are", "#how-it-works"];
 const PUBLIC_NAV = [
-  ["/", "Home"],
-  ["/give", "Give"],
-  ["/need", "Need Help"],
-  ["/categories", "Explore"],
-  ["/how-it-works", "How It Works"],
+  { to: "/", hash: "", label: "Home" },
+  { to: "/#who-we-are", hash: "#who-we-are", label: "Who We Are" },
+  { to: "/#how-it-works", hash: "#how-it-works", label: "How It Works" },
 ];
 
 function PublicHeader({ menuOpen, setMenuOpen }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  // Close the menu on any link click — the pathname effect alone misses clicks on the current page.
+  const { pathname, hash } = useLocation();
+  const onLanding = pathname === "/";
+  const isActive = (item) =>
+    onLanding &&
+    (item.hash ? hash === item.hash : !SECTION_HASHES.includes(hash));
+  // Close the menu on any link click — the location effect alone misses clicks on the current URL.
   const closeOnLink = (e) => {
     if (e.target.closest("a")) setMenuOpen(false);
   };
@@ -118,15 +126,33 @@ function PublicHeader({ menuOpen, setMenuOpen }) {
         aria-label="Main"
         onClick={closeOnLink}
       >
-        {PUBLIC_NAV.map(([to, label]) => (
-          <NavLink key={to} to={to} end={to === "/"}>
-            {label}
-          </NavLink>
-        ))}
+        {PUBLIC_NAV.map((item) => {
+          const active = isActive(item);
+          return (
+            <Link
+              key={item.label}
+              to={item.to}
+              className={active ? "active" : undefined}
+              aria-current={
+                active ? (item.hash ? "location" : "page") : undefined
+              }
+            >
+              {item.label}
+            </Link>
+          );
+        })}
         {!user && (
-          <NavLink to="/login" className="mobile-only">
-            Log in
-          </NavLink>
+          <>
+            <Link to="/login" className="mobile-only nav-account">
+              Log in
+            </Link>
+            <Link
+              to="/signup"
+              className="mobile-only nav-account nav-account--primary"
+            >
+              Sign up free
+            </Link>
+          </>
         )}
       </nav>
       <div className="top-actions">
@@ -174,41 +200,35 @@ function Footer() {
           </Link>
           <p className="footer-tagline">Give · Receive · Be Kind</p>
           <p className="footer-mission">
-            Small acts of kindness create stronger communities. Sahayog makes it
-            easy to pass on useful things and to ask for help — without money
-            changing hands.
+            A community for sharing useful things, asking for help, and making
+            everyday kindness easier.
           </p>
         </div>
-        <nav className="footer-col" aria-label="Footer">
-          <strong>Explore</strong>
+        <nav className="footer-col" aria-label="About Sahayog">
+          <strong>About</strong>
           <ul>
             <li>
-              <Link to="/give">Give something</Link>
+              <Link to="/#who-we-are">Who We Are</Link>
             </li>
             <li>
-              <Link to="/need">Need help</Link>
-            </li>
-            <li>
-              <Link to="/categories">Explore listings</Link>
-            </li>
-            <li>
-              <Link to="/how-it-works">How it works</Link>
-            </li>
-            <li>
-              <Link to="/about">About</Link>
+              <Link to="/#how-it-works">How It Works</Link>
             </li>
           </ul>
         </nav>
-        <div className="footer-col">
-          <strong>Community first</strong>
-          <ul className="footer-notes">
-            <li>Free to use</li>
-            <li>Be respectful</li>
-            <li>Keep exchanges safe</li>
+        <nav className="footer-col" aria-label="Account">
+          <strong>Account</strong>
+          <ul>
+            <li>
+              <Link to="/login">Log in</Link>
+            </li>
+            <li>
+              <Link to="/signup">Sign up free</Link>
+            </li>
           </ul>
-        </div>
+        </nav>
       </div>
       <div className="footer-base">
+        <p>Give freely. Receive with dignity. Be kind.</p>
         <small>© {new Date().getFullYear()} Sahayog</small>
       </div>
     </footer>
@@ -220,45 +240,85 @@ function Footer() {
 // Everyday categories shown in the hero. Photos are the project's existing category images.
 const HERO_TILES = ["books", "clothes", "food"];
 
-const VALUES = [
-  [Gift, "Share freely", "Useful things can find a new home."],
-  [Users, "Community first", "Connect with people nearby and beyond."],
-  [CircleCheck, "Simple to use", "Give, ask, discover, and connect."],
+const IDEAS = [
+  [
+    Repeat2,
+    "Pass it forward",
+    "A book, a useful item, or an everyday essential can continue to help long after you are done with it.",
+  ],
+  [
+    MessageCircleHeart,
+    "Ask without hesitation",
+    "Everyone needs a hand sometimes. Sahayog makes space for people to express what they need with respect.",
+  ],
+  [
+    HandHelping,
+    "Make kindness practical",
+    "Helping does not always need a grand gesture. Sometimes it starts with sharing one useful thing or responding to one request.",
+  ],
 ];
 
-export function Landing() {
-  const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [listings, setListings] = useState([]);
-  const [state, setState] = useState("loading");
-  const [error, setError] = useState("");
-  const load = useCallback(() => {
-    setState("loading");
-    api("/listings?limit=12")
-      .then((d) => {
-        setListings(d.listings || []);
-        setState("ready");
-      })
-      .catch((e) => {
-        setError(e.message);
-        setState("error");
-      });
-  }, []);
+const JOURNEY = [
+  [
+    PackagePlus,
+    "Share what you can",
+    "Have something useful that you no longer need? Add a few details and let the community know it is available.",
+  ],
+  [
+    MessageCircle,
+    "Tell the community what you need",
+    "Looking for something that would help? Describe what you are hoping to find so others can understand your request.",
+  ],
+  [
+    Search,
+    "Find a connection",
+    "Explore the available offers and requests. You may find someone with just the thing you need—or discover a request you can help with.",
+  ],
+  [
+    MessagesSquare,
+    "Talk and agree on the details",
+    "Get in touch with the other person. Discuss the item, ask any questions, and agree on a practical way to complete the exchange.",
+  ],
+  [
+    HeartHandshake,
+    "Pass it on",
+    "Complete the exchange together. Something useful gets a new home, and a small act of generosity makes a difference.",
+  ],
+];
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+/** Scrolls to /#who-we-are and /#how-it-works (React Router does not do this by itself). */
+function useSectionScroll() {
+  const { hash, key } = useLocation();
+  const first = useRef(true);
   useEffect(() => {
-    load();
-  }, [load]);
-  const visible = listings
-    .filter((i) => filter === "all" || i.type === filter)
-    .slice(0, 8);
+    const isFirst = first.current;
+    first.current = false;
+    if (!SECTION_HASHES.includes(hash)) {
+      // Clicking Home or the logo from a section returns to the top; the initial load is left alone.
+      if (!isFirst && !hash)
+        window.scrollTo({
+          top: 0,
+          behavior: prefersReducedMotion() ? "auto" : "smooth",
+        });
+      return;
+    }
+    const target = document.getElementById(hash.slice(1));
+    if (!target) return;
+    // scroll-margin-top in CSS keeps the heading clear of the sticky header.
+    target.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
+    target.focus({ preventScroll: true });
+  }, [hash, key]);
+}
 
-  function onSearch(e) {
-    e.preventDefault();
-    navigate(
-      `/categories${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ""}`,
-    );
-  }
-
+export function Landing() {
+  useSectionScroll();
   return (
     <div className="landing">
       <section className="landing-hero" aria-labelledby="landing-title">
@@ -274,38 +334,13 @@ export function Landing() {
             <br />
             Give what you can. Get what you need.
           </p>
-
-          <form className="landing-search" role="search" onSubmit={onSearch}>
-            <label htmlFor="landing-search-input" className="sr-only">
-              Search listings
-            </label>
-            <div className="landing-search__field">
-              <Search size={18} aria-hidden="true" />
-              <input
-                id="landing-search-input"
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search books, clothes, food, or something you need…"
-                autoComplete="off"
-                enterKeyHint="search"
-              />
-            </div>
-            <button className="landing-btn landing-btn--primary" type="submit">
-              Search
-            </button>
-          </form>
-
-          <div className="landing-actions">
-            <Link className="landing-btn landing-btn--primary" to="/give">
-              <HandHeart size={18} aria-hidden="true" /> Give something
+          <div className="landing-entry">
+            <Link className="landing-btn landing-btn--primary" to="/login">
+              Log in to Sahayog <ArrowRight size={18} aria-hidden="true" />
             </Link>
-            <Link className="landing-btn landing-btn--secondary" to="/need">
-              I need help
-            </Link>
-            <Link className="landing-btn landing-btn--outline" to="/categories">
-              Explore listings
-            </Link>
+            <p className="landing-entry__signup">
+              New to Sahayog? <Link to="/signup">Create an account</Link>
+            </p>
           </div>
         </div>
 
@@ -319,7 +354,7 @@ export function Landing() {
                 <img
                   src={FALLBACK_IMAGES[id]}
                   alt=""
-                  loading={id === "books" ? "eager" : "lazy"}
+                  loading="eager"
                   decoding="async"
                   onError={onImageError}
                 />
@@ -335,130 +370,152 @@ export function Landing() {
         </figure>
       </section>
 
-      <section className="landing-values" aria-label="Why Sahayog">
-        <ul>
-          {VALUES.map(([Icon, title, text]) => (
+      <section
+        id="who-we-are"
+        className="landing-section landing-about"
+        aria-labelledby="who-we-are-title"
+        tabIndex={-1}
+      >
+        <div className="landing-about__story">
+          <p className="landing-eyebrow">Who we are</p>
+          <h2 id="who-we-are-title" className="landing-heading">
+            A community where what you can give meets what someone needs.
+          </h2>
+          <div className="landing-prose">
+            <p>
+              Sahayog brings people together to share useful things and support
+              one another. It gives people a simple way to pass along items they
+              no longer need and a place to ask when something would make a
+              difference in their day.
+            </p>
+            <p>
+              A book that has been read, clothes that no longer fit, or everyday
+              essentials that are still useful can mean a lot to someone else.
+              Sahayog helps those things find a new home instead of going to
+              waste.
+            </p>
+            <p>
+              We believe help should be offered with kindness and received with
+              dignity. It is not about how much someone has. It is about what
+              people can do for one another.
+            </p>
+          </div>
+        </div>
+        <aside
+          className="landing-about__aside"
+          aria-label="Our mission and vision"
+        >
+          <blockquote className="landing-quote">
+            <p>
+              What is no longer needed by one person can be valuable to another.
+            </p>
+          </blockquote>
+          <dl className="landing-purpose">
+            <div>
+              <dt>Our mission</dt>
+              <dd>
+                Make it easier for people to share useful things, ask for
+                support, reduce waste, and help their communities.
+              </dd>
+            </div>
+            <div>
+              <dt>Our vision</dt>
+              <dd>
+                A world where people look out for one another and useful things
+                reach the people who can use them.
+              </dd>
+            </div>
+          </dl>
+        </aside>
+      </section>
+
+      <section
+        className="landing-section landing-idea"
+        aria-labelledby="idea-title"
+      >
+        <div className="landing-idea__intro">
+          <div>
+            <p className="landing-eyebrow">The idea behind Sahayog</p>
+            <h2 id="idea-title" className="landing-heading">
+              Good things deserve another chance.
+            </h2>
+          </div>
+          <p className="landing-idea__statement">
+            Sometimes the things we no longer need are exactly what someone else
+            is looking for. A little sharing can make everyday life easier—and
+            keep useful things from going to waste.
+          </p>
+        </div>
+        <ul className="landing-idea__list">
+          {IDEAS.map(([Icon, title, text]) => (
             <li key={title}>
-              <span className="landing-values__icon" aria-hidden="true">
+              <span className="landing-icon" aria-hidden="true">
                 <Icon size={20} strokeWidth={1.8} />
               </span>
-              <div>
-                <strong>{title}</strong>
-                <span>{text}</span>
-              </div>
+              <h3>{title}</h3>
+              <p>{text}</p>
             </li>
           ))}
         </ul>
       </section>
 
-      <section className="landing-section" aria-labelledby="landing-categories">
-        <div className="landing-section__head">
-          <div>
-            <h2 id="landing-categories">
-              Find what you need. Share what you can.
-            </h2>
-            <p>A few everyday things can make a meaningful difference.</p>
-          </div>
-          <Link className="landing-link" to="/categories">
-            View all <ArrowRight size={15} aria-hidden="true" />
-          </Link>
-        </div>
-        <CategoryGrid
-          iconStyle="line"
-          onChoose={(id) => navigate(`/categories?category=${id}`)}
-        />
-      </section>
-
-      <section className="landing-section" aria-labelledby="landing-recent">
-        <div className="landing-section__head">
-          <div>
-            <h2 id="landing-recent">Recently shared</h2>
-            <p>
-              Things people are offering—and requests from people who could use
-              a hand.
-            </p>
-          </div>
-          <div
-            className="landing-filter"
-            role="group"
-            aria-label="Filter listings"
-          >
-            {[
-              ["all", "All"],
-              ["give", "Give"],
-              ["need", "Need"],
-            ].map(([v, l]) => (
-              <button
-                type="button"
-                key={v}
-                className={filter === v ? "is-active" : ""}
-                aria-pressed={filter === v}
-                onClick={() => setFilter(v)}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-        {state === "loading" ? (
-          <Loading label="Loading community listings…" />
-        ) : state === "error" ? (
-          <ErrorState message={error} onRetry={load} />
-        ) : visible.length ? (
-          <div className="listing-grid">
-            {visible.map((item) => (
-              <ListingCard key={item.id} item={item} />
-            ))}
-          </div>
-        ) : (
-          <Empty
-            title="Nothing shared here yet"
-            message="Be the first to share something with your community."
-            action={
-              <Link to="/post/give" className="btn btn-primary">
-                Post an item
-              </Link>
-            }
-          />
-        )}
-        {state === "ready" && visible.length > 0 && (
-          <p className="landing-more">
-            <Link className="landing-link" to="/categories">
-              Browse all listings <ArrowRight size={15} aria-hidden="true" />
-            </Link>
+      <section
+        id="how-it-works"
+        className="landing-section landing-how"
+        aria-labelledby="how-it-works-title"
+        tabIndex={-1}
+      >
+        <div className="landing-how__intro">
+          <p className="landing-eyebrow">How it works</p>
+          <h2 id="how-it-works-title" className="landing-heading">
+            From one person to another.
+          </h2>
+          <p className="landing-how__lede">
+            A simple way to pass something on, ask for what you need, and make a
+            useful connection.
           </p>
-        )}
+          <p className="landing-how__note">
+            Sahayog helps people find each other. The people involved talk it
+            through and arrange the exchange themselves.
+          </p>
+        </div>
+        <ol className="landing-journey">
+          {JOURNEY.map(([Icon, title, text], i) => (
+            <li key={title}>
+              <div className="landing-journey__marker" aria-hidden="true">
+                <span>{String(i + 1).padStart(2, "0")}</span>
+              </div>
+              <div className="landing-journey__body">
+                <h3>
+                  <Icon size={18} strokeWidth={1.9} aria-hidden="true" />{" "}
+                  {title}
+                </h3>
+                <p>{text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
 
-      <section className="landing-cta" aria-labelledby="landing-cta-title">
+      <section
+        className="landing-closing"
+        aria-labelledby="landing-closing-title"
+      >
         <div>
-          <h2 id="landing-cta-title">A little help can go a long way.</h2>
+          <h2 id="landing-closing-title">A little help can go a long way.</h2>
           <p>
-            Join a community built around sharing what we have and helping where
-            we can.
+            Be part of a community where useful things find a new home and
+            people look out for one another.
           </p>
         </div>
-        <div className="landing-cta__actions">
-          <Link className="landing-btn landing-btn--primary" to="/signup">
+        <div className="landing-closing__actions">
+          <Link className="landing-btn landing-btn--light" to="/signup">
             Create a free account
           </Link>
-          <Link className="landing-btn landing-btn--outline" to="/login">
+          <Link className="landing-btn landing-btn--ghost-light" to="/login">
             Log in
           </Link>
         </div>
-      </section>
-
-      <section className="landing-section" aria-labelledby="landing-how">
-        <div className="landing-section__head">
-          <div>
-            <h2 id="landing-how">How Sahayog works</h2>
-            <p>Helping each other is simple, fast, and free.</p>
-          </div>
-          <Link className="landing-link" to="/how-it-works">
-            Learn more <ArrowRight size={15} aria-hidden="true" />
-          </Link>
-        </div>
-        <Steps iconStyle="line" />
       </section>
     </div>
   );

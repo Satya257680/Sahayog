@@ -9,10 +9,6 @@ import {
   Heart,
   ArrowRight,
   MapPin,
-  UserPlus,
-  Gift,
-  MessageCircle,
-  HeartHandshake,
 } from "lucide-react";
 import { useAuth } from "./auth";
 
@@ -148,38 +144,26 @@ export function Field({ label, hint, error, children, id: givenId }) {
   );
 }
 
-/**
- * Category picker. `iconStyle="line"` renders the lucide icon from CATS instead of the emoji
- * (used by the landing page); every other caller keeps the original emoji look.
- */
-export function CategoryGrid({ onChoose, iconStyle = "emoji" }) {
-  const line = iconStyle === "line";
+export function CategoryGrid({ onChoose }) {
   return (
-    <div className={`category-grid${line ? " category-grid--line" : ""}`}>
-      {CATS.map((c) => {
-        const Icon = c.icon;
-        return (
-          <button
-            type="button"
-            className="category-card"
-            key={c.id}
-            onClick={() => onChoose?.(c.id)}
-          >
-            <span className={`category-icon ${c.tint}`} aria-hidden="true">
-              {line ? <Icon size={22} strokeWidth={1.8} /> : c.emoji}
-            </span>
-            <span>
-              <strong>{c.name}</strong>
-              <small>{c.blurb}</small>
-            </span>
-            <ArrowRight
-              className="category-arrow"
-              size={16}
-              aria-hidden="true"
-            />
-          </button>
-        );
-      })}
+    <div className="category-grid">
+      {CATS.map((c) => (
+        <button
+          type="button"
+          className="category-card"
+          key={c.id}
+          onClick={() => onChoose?.(c.id)}
+        >
+          <span className={`category-icon ${c.tint}`} aria-hidden="true">
+            {c.emoji}
+          </span>
+          <span>
+            <strong>{c.name}</strong>
+            <small>{c.blurb}</small>
+          </span>
+          <ArrowRight className="category-arrow" size={16} aria-hidden="true" />
+        </button>
+      ))}
     </div>
   );
 }
@@ -252,39 +236,22 @@ export function ListingCard({ item, onUnsave }) {
   );
 }
 
-/** "How it works" steps. `iconStyle="line"` swaps the emoji for lucide icons (landing page). */
-export function Steps({ iconStyle = "emoji" }) {
+export function Steps() {
   const steps = [
-    ["👤", UserPlus, "Join the community", "Create a free account in minutes."],
-    ["🎁", Gift, "Give or ask", "Post something you can give or need."],
-    [
-      "💬",
-      MessageCircle,
-      "Connect safely",
-      "Message the person and arrange details.",
-    ],
-    [
-      "💗",
-      HeartHandshake,
-      "Make a difference",
-      "Complete the exchange and spread kindness.",
-    ],
+    ["👤", "Join the community", "Create a free account in minutes."],
+    ["🎁", "Give or ask", "Post something you can give or need."],
+    ["💬", "Connect safely", "Message the person and arrange details."],
+    ["💗", "Make a difference", "Complete the exchange and spread kindness."],
   ];
-  const line = iconStyle === "line";
   return (
-    <ol className={`steps${line ? " steps--line" : ""}`}>
-      {steps.map(([emoji, Icon, title, text], i) => (
-        <li className="step" key={title}>
+    <ol className="steps">
+      {steps.map((s) => (
+        <li className="step" key={s[1]}>
           <div className="step-icon" aria-hidden="true">
-            {line ? <Icon size={22} strokeWidth={1.8} /> : emoji}
+            {s[0]}
           </div>
-          {line && (
-            <span className="step-number" aria-hidden="true">
-              {String(i + 1).padStart(2, "0")}
-            </span>
-          )}
-          <h3>{title}</h3>
-          <p>{text}</p>
+          <h3>{s[1]}</h3>
+          <p>{s[2]}</p>
         </li>
       ))}
     </ol>
