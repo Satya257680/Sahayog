@@ -77,25 +77,19 @@ export function BootGate({ children }) {
   // "Continue" is an explicit user choice, so it skips the remaining minimum time.
   const canLeave = ready && !retrying && (continued || (minDone && !bootError));
 
+  // Leave once start-up is complete. The fade itself is timed by the next effect.
   useEffect(() => {
-    if (phase !== "boot" || !canLeave) return undefined;
+    if (phase !== "boot" || !canLeave) return;
     markSeen();
-    if (!visible) {
-      setPhase("done"); // splash never appeared: nothing to fade
-      return undefined;
-    }
-    setPhase("leaving");
-    const t = window.setTimeout(() => setPhase("done"), reduced ? 0 : FADE_MS);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canLeave, phase]);
+    setPhase(visible ? "leaving" : "done"); // splash never appeared: nothing to fade
+  }, [canLeave, phase, visible]);
 
-  // Safety net for the fade timer being cleared by a re-render in the "leaving" phase.
+  // One timer owns the fade; with reduced motion there is no fade, so the app shows at once.
   useEffect(() => {
     if (phase !== "leaving") return undefined;
-    const t = window.setTimeout(() => setPhase("done"), FADE_MS + 50);
+    const t = window.setTimeout(() => setPhase("done"), reduced ? 0 : FADE_MS);
     return () => window.clearTimeout(t);
-  }, [phase]);
+  }, [phase, reduced]);
 
   async function retry() {
     setRetrying(true);

@@ -165,6 +165,37 @@
 .boot-splash__reload {
   margin-top: 16px;
 }
+/* Link styled as a button (error-boundary fallback, see ErrorBoundary.jsx) */
+.boot-splash__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.boot-splash--fallback .boot-splash__status {
+  margin-top: 32px;
+}
+/* Development-only error details in the error-boundary fallback */
+.boot-splash__dev {
+  margin: 20px auto 0;
+  max-width: 520px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--l-body, #4f4868);
+}
+.boot-splash__dev summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.boot-splash__dev pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--l-line, #e7e2f1);
+  border-radius: 8px;
+  background: var(--l-lavender, #f7f4fd);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* ── Animation ──────────────────────────────────────────────────────────
    SVG user-space origins (transform-box: view-box) so each limb pivots at
