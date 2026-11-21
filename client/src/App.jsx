@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth, RequireAuth, GuestOnly, FullPageLoader } from "./auth";
+import { BootGate } from "./splash";
 import {
   PublicLayout,
   Landing,
@@ -49,7 +50,16 @@ function Redirect({ to }) {
   return <Navigate to={`${to}${search}`} replace />;
 }
 
+/** The branded start-up screen wraps the router once, so it never replays on in-app navigation. */
 export default function App() {
+  return (
+    <BootGate>
+      <AppRoutes />
+    </BootGate>
+  );
+}
+
+function AppRoutes() {
   return (
     <Routes>
       {/* Authentication */}

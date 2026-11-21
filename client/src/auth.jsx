@@ -17,11 +17,14 @@ export function useAuth() {
 
 /**
  * Holds the signed-in user (loaded from the server cookie session), the saved-listing ids
- * (so every heart button shows server truth — F-10) and the toast helper.
+ * (so every heart button shows server truth, F-10) and the toast helper.
  */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
+  // Set when the start-up session check fails for a reason other than "signed out" (network / 5xx),
+  // so the start-up screen can offer "Try again" instead of silently showing the signed-out site.
+  const [bootError, setBootError] = useState(false);
   const [savedIds, setSavedIds] = useState(() => new Set());
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(0);
@@ -48,23 +51,27 @@ export function AuthProvider({ children }) {
     ({ force = false } = {}) => {
       // Visitors have no session cookie, so don't call the protected endpoint just to receive a 401.
       if (!force && !hasSessionHint()) {
+        setBootError(false);
         setUser(null);
         setSavedIds(new Set());
         setReady(true);
         return Promise.resolve(null);
       }
       if (inFlight.current) return inFlight.current;
+      setBootError(false);
       inFlight.current = api("/auth/me")
         .then((d) => {
           setUser(d.user);
           loadSaved();
           return d.user;
         })
-        .catch(() => {
+        .catch((err) => {
           setUser(null);
           setSavedIds(new Set());
+          // 401 = signed out (expected). Anything else means we could not check the session.
+          if (err?.status !== 401) setBootError(true);
           return null;
-        }) // 401 = signed out; never retried
+        }) // never retried automatically
         .finally(() => {
           inFlight.current = null;
           setReady(true);
@@ -104,6 +111,7 @@ export function AuthProvider({ children }) {
   const signIn = useCallback(
     (nextUser) => {
       setUser(nextUser);
+      setBootError(false);
       setReady(true);
       loadSaved();
     },
@@ -159,6 +167,7 @@ export function AuthProvider({ children }) {
       user,
       setUser,
       ready,
+      bootError,
       refresh,
       signIn,
       logout,
@@ -166,7 +175,17 @@ export function AuthProvider({ children }) {
       savedIds,
       toggleSave,
     }),
-    [user, ready, refresh, signIn, logout, notify, savedIds, toggleSave],
+    [
+      user,
+      ready,
+      bootError,
+      refresh,
+      signIn,
+      logout,
+      notify,
+      savedIds,
+      toggleSave,
+    ],
   );
 
   return (

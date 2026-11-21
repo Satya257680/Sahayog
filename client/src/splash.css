@@ -1,0 +1,382 @@
+/* ==========================================================================
+   Sahayog start-up screen (client/src/splash.jsx).
+   White surface, brand logo + wordmark, an SVG hand-off animation and an
+   indeterminate progress bar. Every rule is scoped to .boot-splash / .handover.
+
+   Master timeline for the scene: 3.6 s, played once.
+     0.00 to 1.90 s  giver walks in from the left and slows to a stop (walk cycle: 5 steps)
+     1.70 to 2.20 s  recipient raises her arms to receive
+     1.90 to 2.40 s  giver holds the box out
+     2.55 to 3.00 s  box passes to the recipient
+     3.00 to 3.35 s  recipient draws it in, giver lowers his arms
+     3.00 to 3.60 s  recipient reacts (head tilt, heart)
+   Percentages below are those times divided by 3.6 s.
+   ========================================================================== */
+
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  background: #fff;
+  color: var(--l-ink, #241b45);
+  opacity: 1;
+  transition: opacity 0.28s ease;
+}
+.boot-splash--leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+.boot-splash__inner {
+  width: min(640px, 100%);
+  padding: 24px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* Brand row */
+.boot-splash__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.boot-splash__logo {
+  width: 72px;
+  height: 72px;
+}
+.boot-splash__wordmark {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+.boot-splash__name {
+  font-size: clamp(30px, 7vw, 42px);
+  font-weight: 900;
+  letter-spacing: -0.8px;
+  color: var(--l-ink, #241b45);
+}
+.boot-splash__tagline {
+  margin-top: 4px;
+  font-size: clamp(13px, 3.4vw, 16px);
+  font-weight: 700;
+  color: var(--l-muted, #625b7c);
+}
+
+/* Scene */
+.handover {
+  display: block;
+  width: 100%;
+  max-width: 600px;
+  height: auto;
+  margin: clamp(16px, 4vh, 36px) 0 clamp(8px, 2vh, 16px);
+  overflow: hidden;
+}
+.handover__ground {
+  stroke: #e7e2f1;
+  stroke-width: 4;
+}
+.hv-shadow {
+  fill: #efecf7;
+}
+
+/* Status, bar, error */
+.boot-splash__status {
+  margin: 0 0 14px;
+  min-height: 1.4em;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--l-plum, #4b329a);
+}
+.boot-splash__bar {
+  position: relative;
+  width: min(420px, 86%);
+  height: 6px;
+  border-radius: 3px;
+  background: var(--l-plum-soft, #f1ecfb);
+  overflow: hidden;
+}
+.boot-splash__bar span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 34%;
+  border-radius: 3px;
+  background: var(--l-plum, #4b329a);
+  animation: boot-bar 1.4s ease-in-out infinite;
+}
+@keyframes boot-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+.boot-splash__error p {
+  margin: 0 auto 14px;
+  max-width: 400px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--l-body, #4f4868);
+}
+.boot-splash__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.boot-splash__btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--l-line-strong, #d3c8ee);
+  border-radius: var(--l-r-control, 10px);
+  background: #fff;
+  color: var(--l-ink, #241b45);
+  font-size: 15px;
+  font-weight: 800;
+  transition: background-color 0.15s;
+}
+.boot-splash__btn:hover:not(:disabled) {
+  background: var(--l-lavender, #f7f4fd);
+}
+.boot-splash__btn--primary {
+  border-color: var(--l-plum, #4b329a);
+  background: var(--l-plum, #4b329a);
+  color: #fff;
+}
+.boot-splash__btn--primary:hover:not(:disabled) {
+  background: var(--l-plum-hover, #3c2784);
+}
+.boot-splash__btn:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+.boot-splash__btn:focus-visible {
+  outline: 3px solid var(--l-pink, #c2257a);
+  outline-offset: 2px;
+}
+.boot-splash__reload {
+  margin-top: 16px;
+}
+
+/* ── Animation ──────────────────────────────────────────────────────────
+   SVG user-space origins (transform-box: view-box) so each limb pivots at
+   its joint: hips 206,176 / giver shoulder 207,124 / recipient shoulder
+   401,168 / recipient neck 402,150 / heart 372,95.                        */
+.handover g {
+  transform-box: view-box;
+}
+.hv-giver,
+.hv-carry {
+  animation: hv-walk-in 3.6s both;
+}
+.hv-giver__body,
+.hv-carry__bob {
+  animation: hv-bob 0.38s ease-in-out 5 both;
+}
+.hv-leg {
+  transform-origin: 206px 176px;
+}
+.hv-leg--front {
+  animation: hv-stride-a 0.38s ease-in-out 5 both;
+}
+.hv-leg--back {
+  animation: hv-stride-b 0.38s ease-in-out 5 both;
+}
+.hv-giver__arm-front,
+.hv-giver__arm-back {
+  transform-origin: 207px 124px;
+  animation: hv-giver-arms 3.6s ease-in-out both;
+}
+.hv-box {
+  animation: hv-box 3.6s ease-in-out both;
+}
+.hv-recipient__arms {
+  transform-origin: 401px 168px;
+  animation: hv-recipient-arms 3.6s ease-in-out both;
+}
+.hv-recipient__head {
+  transform-origin: 402px 150px;
+  animation: hv-recipient-head 3.6s ease-in-out both;
+}
+.hv-heart {
+  transform-origin: 372px 95px;
+  opacity: 0;
+  animation: hv-heart 3.6s ease-out both;
+}
+.hv-sparkles {
+  opacity: 0;
+  animation: hv-sparkles 3.6s ease-out both;
+}
+
+/* Walk in and decelerate to a stop at 1.9 s (52.8%). */
+@keyframes hv-walk-in {
+  0% {
+    transform: translateX(-270px);
+    animation-timing-function: cubic-bezier(0.25, 0.55, 0.35, 1);
+  }
+  52.8%,
+  100% {
+    transform: translateX(0);
+  }
+}
+/* Body rises on each step (two steps per 0.38 s cycle). */
+@keyframes hv-bob {
+  0%,
+  50%,
+  100% {
+    transform: translateY(0);
+  }
+  25%,
+  75% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes hv-stride-a {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-19deg);
+  }
+  75% {
+    transform: rotate(19deg);
+  }
+}
+@keyframes hv-stride-b {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(19deg);
+  }
+  75% {
+    transform: rotate(-19deg);
+  }
+}
+/* Hold the box out (1.9 to 2.4 s), keep it there while it passes, then lower the empty arms. */
+@keyframes hv-giver-arms {
+  0%,
+  52.8% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  66.7%,
+  83.3% {
+    transform: translate(22px, -6px) rotate(0deg);
+  }
+  93.1%,
+  100% {
+    transform: translate(0, 2px) rotate(52deg);
+  }
+}
+/* Same offsets as the arms while held, then into the recipient's hands and slightly towards her. */
+@keyframes hv-box {
+  0%,
+  52.8% {
+    transform: translate(0, 0);
+  }
+  66.7%,
+  70.8% {
+    transform: translate(22px, -6px);
+  }
+  83.3% {
+    transform: translate(70px, 14px);
+  }
+  93.1%,
+  100% {
+    transform: translate(78px, 16px);
+  }
+}
+/* Arms resting low, raised to receive (1.7 to 2.2 s), then drawn in with the box. */
+@keyframes hv-recipient-arms {
+  0%,
+  47.2% {
+    transform: translate(0, 0) rotate(-38deg);
+  }
+  61.1%,
+  83.3% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  93.1%,
+  100% {
+    transform: translate(8px, 2px) rotate(0deg);
+  }
+}
+@keyframes hv-recipient-head {
+  0%,
+  83.3% {
+    transform: translateY(0) rotate(0deg);
+  }
+  91.7% {
+    transform: translateY(-3px) rotate(-6deg);
+  }
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+}
+@keyframes hv-heart {
+  0%,
+  83.3% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.4);
+  }
+  93% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1);
+  }
+}
+@keyframes hv-sparkles {
+  0%,
+  86% {
+    opacity: 0;
+  }
+  97%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Narrow screens: keep the scene readable. */
+@media (max-width: 420px) {
+  .boot-splash__brand {
+    gap: 10px;
+  }
+  .boot-splash__logo {
+    width: 56px;
+    height: 56px;
+  }
+  .boot-splash__status {
+    font-size: 16px;
+  }
+}
+
+/* Reduced motion: a still "about to hand over" scene (the unanimated frame), no walking, no sliding bar.
+   animation-name is cleared explicitly because a global rule shortens every animation to 0.01 ms,
+   which would otherwise make the infinite bar flicker. */
+@media (prefers-reduced-motion: reduce) {
+  .boot-splash,
+  .boot-splash *,
+  .handover * {
+    animation-name: none !important;
+  }
+  .boot-splash {
+    transition: none;
+  }
+  .boot-splash__bar span {
+    width: 100%;
+    opacity: 0.45;
+  }
+}

@@ -29,6 +29,14 @@
   height: 24px;
 }
 
+/* ── Public header: single "Log in" action (no sign-up button) ───────── */
+@media (max-width: 760px) {
+  .topbar .header-login {
+    border: 1px solid var(--l-line-strong, #d3c8ee);
+    min-height: 40px;
+  }
+}
+
 /* ── Page shell ───────────────────────────────────────────────────────── */
 .auth-shell {
   min-height: 100vh;
@@ -61,6 +69,31 @@
     clamp(22px, 4.5vw, 36px);
   min-width: 0;
 }
+/* Login: "Back to home" link at the top of the card (always routes to "/"). */
+.auth-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  margin: -8px 0 4px -10px;
+  padding: 6px 10px;
+  border-radius: var(--l-r-control, 10px);
+  color: var(--l-plum, #4b329a);
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: background-color 0.15s;
+}
+.auth-home-link:hover {
+  background: var(--l-lavender, #f7f4fd);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-home-link:focus-visible {
+  outline: 3px solid var(--l-pink, #c2257a);
+  outline-offset: 2px;
+}
+
 .auth-panel__logo {
   display: block;
   width: 72px;
@@ -98,6 +131,28 @@
 }
 .auth-panel .auth-foot {
   margin: 22px 0 0;
+}
+/* Login: "New to Sahayog? Create an account" after the social buttons and their note. */
+.auth-panel .auth-alt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 22px 0 0;
+  font-size: 15px;
+  color: var(--l-muted, #625b7c);
+  text-align: center;
+}
+.auth-panel .auth-alt svg {
+  flex-shrink: 0;
+  color: var(--l-plum, #4b329a);
+}
+.auth-panel .auth-alt a {
+  color: var(--plum, #4b329a);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .auth-panel .auth-icon {
   margin: 0 auto 12px;
@@ -158,13 +213,22 @@
 }
 
 /* ── Buttons ──────────────────────────────────────────────────────────── */
+/* Solid brand plum and the shared control radius (CLAUDE.md: no pill buttons, no gradient fills). */
 .auth-panel .auth-submit {
   min-height: 52px;
   font-size: 16px;
   font-weight: 800;
-  border-radius: 999px;
+  border-radius: var(--l-r-control, 10px);
   margin-top: 4px;
   text-decoration: none;
+  background: var(--l-plum, #4b329a);
+  box-shadow: none;
+  transition: background-color 0.15s;
+}
+.auth-panel .auth-submit:hover:not(:disabled) {
+  background: var(--l-plum-hover, #3c2784);
+  transform: none;
+  box-shadow: none;
 }
 .auth-panel .auth-submit:disabled {
   opacity: 0.7;
@@ -172,7 +236,7 @@
 }
 .auth-panel .social-btn {
   min-height: 48px;
-  border-radius: 999px;
+  border-radius: var(--l-r-control, 10px);
   font-size: 14px;
   padding-inline: 12px;
   white-space: normal;

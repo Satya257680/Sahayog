@@ -13,7 +13,10 @@ import {
   Mail,
   Lock,
   UserRound,
+  UserPlus,
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import { api, apiUrl } from "../api";
 import { useAuth, FullPageLoader } from "../auth";
@@ -124,7 +127,7 @@ export function PasswordChecklist({ password, confirm, showConfirm = false }) {
             )}
             <span>
               {r.label}
-              <span className="sr-only">{r.ok ? " — done" : " — missing"}</span>
+              <span className="sr-only">{r.ok ? ": done" : ": missing"}</span>
             </span>
           </li>
         ))}
@@ -242,7 +245,7 @@ function FormError({ message }) {
  * Public navbar + one centered card. The approved logo sits at the top of the card, above the heading.
  * No split screen, no decorative background shapes.
  */
-function AuthLayout({ children, wide = false }) {
+function AuthLayout({ children, wide = false, backToHome = false }) {
   const [menuOpen, setMenuOpen] = usePublicMenu();
   return (
     <div className="app-shell auth-shell">
@@ -252,6 +255,13 @@ function AuthLayout({ children, wide = false }) {
       <PublicHeader menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
       <main className="auth-center" id="main" tabIndex={-1}>
         <div className={`auth-panel${wide ? " auth-panel--wide" : ""}`}>
+          {/* Always goes to the landing page (not history.back), so it works when /login is opened directly. */}
+          {backToHome && (
+            <Link to="/" className="auth-home-link">
+              <ArrowLeft size={17} aria-hidden="true" />
+              Back to home
+            </Link>
+          )}
           <Link to="/" className="auth-panel__logo" aria-label="Sahayog home">
             <BrandLogo size={72} alt="" />
           </Link>
@@ -349,13 +359,10 @@ export function LoginPage() {
   }
 
   return (
-    <AuthLayout>
+    <AuthLayout backToHome>
       <h1>Log in</h1>
       <p className="auth-sub">
-        New to Sahayog?{" "}
-        <Link to="/signup" state={location.state}>
-          Create an account
-        </Link>
+        Welcome back. Please enter your details to continue.
       </p>
       {notice && (
         <div className="form-notice" role="status">
@@ -403,13 +410,29 @@ export function LoginPage() {
           disabled={busy}
           aria-busy={busy}
         >
-          {busy ? "Logging in…" : "Log in"}
+          {busy ? (
+            "Logging in…"
+          ) : (
+            <>
+              Log in <ArrowRight size={18} aria-hidden="true" />
+            </>
+          )}
         </button>
       </form>
       <div className="divider">
         <span>or</span>
       </div>
       <SocialButtons next={from} verb="Log in" />
+      {/* Account prompt sits after the whole social block (buttons + provider note). */}
+      <p className="auth-alt">
+        <UserPlus size={18} aria-hidden="true" />
+        <span>
+          New to Sahayog?{" "}
+          <Link to="/signup" state={location.state}>
+            Create an account
+          </Link>
+        </span>
+      </p>
     </AuthLayout>
   );
 }
@@ -888,8 +911,15 @@ export function AuthCallback() {
   const [params] = useSearchParams();
   useEffect(() => {
     const next = params.get("next") || "/dashboard";
+    // Same-site paths only. Browsers treat "/\host" like "//host", so backslashes and control
+    // characters are rejected too (matches the server's safeNext in routes/oauth.js).
     const safe =
-      next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+      next.startsWith("/") &&
+      !next.startsWith("//") &&
+      !/[\\\u0000-\u001f]/.test(next) &&
+      next.length < 300
+        ? next
+        : "/dashboard";
     refresh({ force: true }).then((u) =>
       navigate(u ? safe : "/login?oauthError=provider_error", {
         replace: true,

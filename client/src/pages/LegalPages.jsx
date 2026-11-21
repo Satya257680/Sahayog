@@ -12,9 +12,9 @@ const CONTACT = "the contact details published on this site";
 
 function LegalLayout({ title, children }) {
   useEffect(() => {
-    document.title = `${title} — Sahayog`;
+    document.title = `${title} | Sahayog`;
     return () => {
-      document.title = "Sahayog — Give · Receive · Be Kind";
+      document.title = "Sahayog | Give · Receive · Be Kind";
     };
   }, [title]);
   return (

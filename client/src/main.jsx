@@ -6,6 +6,7 @@ import { AuthProvider } from "./auth.jsx";
 import "./styles.css";
 import "./app.css";
 import "./auth.css";
+import "./splash.css";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

@@ -102,7 +102,7 @@ export function PublicHeader({ menuOpen, setMenuOpen }) {
   const isActive = (item) =>
     onLanding &&
     (item.hash ? hash === item.hash : !SECTION_HASHES.includes(hash));
-  // Close the menu on any link click — the location effect alone misses clicks on the current URL.
+  // Close the menu on any link click: the location effect alone misses clicks on the current URL.
   const closeOnLink = (e) => {
     if (e.target.closest("a")) setMenuOpen(false);
   };
@@ -146,19 +146,6 @@ export function PublicHeader({ menuOpen, setMenuOpen }) {
             </Link>
           );
         })}
-        {!user && (
-          <>
-            <Link to="/login" className="mobile-only nav-account">
-              Log in
-            </Link>
-            <Link
-              to="/signup"
-              className="mobile-only nav-account nav-account--primary"
-            >
-              Sign up free
-            </Link>
-          </>
-        )}
       </nav>
       <div className="top-actions">
         {user ? (
@@ -181,14 +168,11 @@ export function PublicHeader({ menuOpen, setMenuOpen }) {
             </button>
           </>
         ) : (
-          <>
-            <Link className="btn btn-ghost btn-small desktop-only" to="/login">
-              Log in
-            </Link>
-            <Link className="btn btn-primary btn-small" to="/signup">
-              Sign up free
-            </Link>
-          </>
+          // Only "Log in" here: the header has no sign-up button (account creation stays on the
+          // landing hero and the login page). Visible at every width, so it replaces the mobile-menu copy.
+          <Link className="btn btn-ghost btn-small header-login" to="/login">
+            Log in
+          </Link>
         )}
       </div>
     </header>
@@ -277,7 +261,7 @@ const JOURNEY = [
   [
     Search,
     "Find a connection",
-    "Explore the available offers and requests. You may find someone with just the thing you need—or discover a request you can help with.",
+    "Explore the available offers and requests. You may find someone with just the thing you need, or discover a request you can help with.",
   ],
   [
     MessagesSquare,
@@ -335,7 +319,7 @@ export function Landing() {
             <span className="landing-title__accent">Change a lot.</span>
           </h1>
           <p className="landing-lede">
-            A place where people help each other — freely.
+            A place where people help each other, freely.
             <br />
             Give what you can. Get what you need.
           </p>
@@ -370,7 +354,7 @@ export function Landing() {
             ))}
           </div>
           <figcaption>
-            Books, clothes and everyday essentials — passed on freely.
+            Books, clothes and everyday essentials, passed on freely.
           </figcaption>
         </figure>
       </section>
@@ -447,7 +431,7 @@ export function Landing() {
           </div>
           <p className="landing-idea__statement">
             Sometimes the things we no longer need are exactly what someone else
-            is looking for. A little sharing can make everyday life easier—and
+            is looking for. A little sharing can make everyday life easier, and
             keep useful things from going to waste.
           </p>
         </div>
